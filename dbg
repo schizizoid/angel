@@ -1,0 +1,4 @@
+#!/bin/bash
+rm build/scanny
+g++ src/scanny.cpp -Iinclude -Llib -lglfw3 -limgui -o build/scanny
+sudo build/scanny
