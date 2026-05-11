@@ -1,4 +1,6 @@
 #!/bin/bash
 rm build/scanny
+echo "compiling"
 g++ src/scanny.cpp -Iinclude -Llib -lglfw3 -limgui -o build/scanny
+echo "build successfull? attempting run"
 sudo build/scanny
