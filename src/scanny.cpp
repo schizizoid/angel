@@ -8,8 +8,13 @@
 
 //debug functions:
 template<typename T>
-void print(std::string string, T value) {
+void print_value(std::string string, T value) {
     std::cout << string << value << std::endl;
+}
+
+template<typename T>
+void print(T value) {
+    std::cout << value << std::endl;
 }
 
 struct Region {
@@ -45,38 +50,48 @@ void write_address(pid_t pid, uintptr_t address, float value) {
     std::cout << "value: " << value << std::endl;
 }
 
-// std::vector<uintptr_t>   UNFINISHED!!
-void scan_regions(pid_t pid, std::vector<Region> regions, float value) {
+// initial scan. use only once
+std::vector<uintptr_t> scan_regions(pid_t pid, std::vector<Region> regions, float value) {
     std::vector<uintptr_t> valid_addresses;
 
     size_t buffer_size = 1024 * 1024;
     std::vector<char> buffer(buffer_size);
 
-    Region region = regions[0];
+    for(Region region : regions) {
+        size_t region_size = region.end_address - region.start_address;
 
-    size_t region_size = region.end_address - region.start_address;
-    std::cout << std::dec << "region size: " << region_size << std::endl;
+        iovec local;
+        local.iov_base = buffer.data();
 
-    iovec local;
-    local.iov_base = buffer.data();
+        iovec remote;
 
-    iovec remote;
+        int chunks = std::ceil((float)region_size / (float)buffer_size);
 
-    size_t remaining_bytes = region_size;
-    for(int i = 0 ; i < std::ceil((float)region_size / (float)buffer_size); i++) {
-        size_t chunk_size = std::min(buffer_size, remaining_bytes);
+        size_t remaining_bytes = region_size;
+        for(int i = 0 ; i < chunks; i++) {
+            size_t chunk_size = std::min(buffer_size, remaining_bytes);
 
-        print("reading chunk: ", chunk_size);
+            local.iov_len = chunk_size;
 
-        local.iov_len = chunk_size;
+            remote.iov_base = (void*)(region.start_address + buffer_size * i);
+            remote.iov_len = chunk_size;
 
-        remote.iov_base = (void*)(region.start_address + buffer_size * i);
-        remote.iov_len = chunk_size;
+            process_vm_readv(pid, &local, 1, &remote, 1, 0);
 
-        process_vm_readv(pid, &local, 1, &remote, 1, 0);
+            //region.start_address + (buffer_size * i) + j
 
-        remaining_bytes -= chunk_size;
+            for(int j = 0; j < chunk_size - sizeof(float); j+=4) {
+                float* f = (float*)&buffer[j]; // looks scary, just gives the float value of a position in the buffer
+                if(*f == value) {
+                    uintptr_t address = region.start_address + (buffer_size * i) + j;
+                    valid_addresses.push_back(address);
+                }
+            }
+
+            remaining_bytes -= chunk_size;
+        }
     }
+    return valid_addresses;
 }
 
 std::vector<Region> get_regions(pid_t pid) {
@@ -138,7 +153,7 @@ int main() {
 
     pid_t pid = find_pid_by_name(name);
 
-    print("pid: ", pid);
+    print_value("pid: ", pid);
 
     std::vector regions = get_regions(pid);
 
@@ -146,7 +161,13 @@ int main() {
     float value;
     std::cin >> value;
 
-    scan_regions(pid, regions, value);
+    std::vector<uintptr_t> addresses = scan_regions(pid, regions, value);
+
+    print("reading scanned data");
+
+    for(uintptr_t address : addresses) {
+        write_address(pid, address, 13);
+    }
 
     // for(Region candidate_region : regions) {
     //     std::cout << candidate_region.start_address << " : " << candidate_region.end_address << std::endl;
