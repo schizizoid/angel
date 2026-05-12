@@ -84,7 +84,7 @@ std::vector<uintptr_t> scan_regions(pid_t pid, std::vector<Region> regions, floa
 
             for(int j = 0; j < chunk_size - sizeof(float); j+=4) {
                 float* f = (float*)&buffer[j]; // looks scary, just gives the float value of a position in the buffer
-                if(*f == value) {
+                if(std::abs(*f - value) < 0.001f) {
                     uintptr_t address = region.start_address + (buffer_size * i) + j;
                     valid_addresses.push_back(address);
                 }
@@ -101,7 +101,7 @@ void rescan(pid_t pid, std::vector<uintptr_t>& valid_addresses, float value) {
     std::vector<uintptr_t> new_valid_addresses;
     for (uintptr_t address : valid_addresses) {
         float current_value = read_address(pid, address);
-        if(current_value == value) {
+        if(std::abs(current_value - value) < 0.001f) {
             new_valid_addresses.push_back(address);
         }
     }
