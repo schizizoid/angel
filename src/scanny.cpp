@@ -5,6 +5,7 @@
 #include <vector>
 #include <sys/uio.h>
 #include <cmath>
+#include <thread>
 
 //debug functions:
 template<typename T>
@@ -22,7 +23,7 @@ struct Region {
     uintptr_t end_address;
 };
 
-void read_address(pid_t pid, uintptr_t address) {
+float read_address(pid_t pid, uintptr_t address) {
     float value;
 
     iovec local;
@@ -34,7 +35,7 @@ void read_address(pid_t pid, uintptr_t address) {
     remote.iov_len = sizeof(float);
 
     process_vm_readv(pid, &local, 1, &remote, 1, 0);
-    std::cout << "value: " << value << std::endl;
+    return value;
 }
 
 void write_address(pid_t pid, uintptr_t address, float value) {
@@ -47,7 +48,6 @@ void write_address(pid_t pid, uintptr_t address, float value) {
     remote.iov_len = sizeof(float);
 
     process_vm_writev(pid, &local, 1, &remote, 1, 0);
-    std::cout << "value: " << value << std::endl;
 }
 
 // initial scan. use only once
@@ -69,6 +69,7 @@ std::vector<uintptr_t> scan_regions(pid_t pid, std::vector<Region> regions, floa
 
         size_t remaining_bytes = region_size;
         for(int i = 0 ; i < chunks; i++) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
             size_t chunk_size = std::min(buffer_size, remaining_bytes);
 
             local.iov_len = chunk_size;
@@ -76,7 +77,8 @@ std::vector<uintptr_t> scan_regions(pid_t pid, std::vector<Region> regions, floa
             remote.iov_base = (void*)(region.start_address + buffer_size * i);
             remote.iov_len = chunk_size;
 
-            process_vm_readv(pid, &local, 1, &remote, 1, 0);
+            ssize_t bytes_read = process_vm_readv(pid, &local, 1, &remote, 1, 0);
+            if(bytes_read <= 0) continue;
 
             //region.start_address + (buffer_size * i) + j
 
@@ -92,6 +94,21 @@ std::vector<uintptr_t> scan_regions(pid_t pid, std::vector<Region> regions, floa
         }
     }
     return valid_addresses;
+}
+
+//use after the initial scan is done ^
+void rescan(pid_t pid, std::vector<uintptr_t>& valid_addresses, float value) {
+    std::vector<uintptr_t> new_valid_addresses;
+    for (uintptr_t address : valid_addresses) {
+        float current_value = read_address(pid, address);
+        if(current_value == value) {
+            new_valid_addresses.push_back(address);
+        }
+    }
+
+    valid_addresses = new_valid_addresses;
+    new_valid_addresses.clear();
+    new_valid_addresses.shrink_to_fit();
 }
 
 std::vector<Region> get_regions(pid_t pid) {
@@ -153,43 +170,42 @@ int main() {
 
     pid_t pid = find_pid_by_name(name);
 
-    print_value("pid: ", pid);
+    if(pid == -1) { print("program not found"); return -1; }
 
-    std::vector regions = get_regions(pid);
+    while(true) {
+        std::cout << "initial scan value?: ";
+        float value;
+        std::cin >> value;
 
-    std::cout << "whatcha wanna write: ";
-    float value;
-    std::cin >> value;
+        std::vector regions = get_regions(pid);
 
-    std::vector<uintptr_t> addresses = scan_regions(pid, regions, value);
+        std::vector<uintptr_t> addresses = scan_regions(pid, regions, value);
 
-    print("reading scanned data");
+        while(true)
+        {
+            print_value("amount of matches: ", addresses.size());
+            std::cout << "write valid addresses (w), rescan current for new value (r) cancel scan (c): ";
+            char option;
+            std::cin >> option;
 
-    for(uintptr_t address : addresses) {
-        write_address(pid, address, 13);
+            if(option == 'w') {
+                std::cout << "watcha wanna write?: ";
+                std::cin >> value;
+                for(uintptr_t address : addresses) {
+                    write_address(pid, address, value);
+                }
+            }
+            else if(option == 'r') {
+                std::cout << "wats the new value?: ";
+                std::cin >> value;
+                rescan(pid, addresses, value);
+            }
+            else if(option == 'c') {
+                break;
+            }
+        }
+        
     }
-
-    // for(Region candidate_region : regions) {
-    //     std::cout << candidate_region.start_address << " : " << candidate_region.end_address << std::endl;
-    // }
-
-    // std::cout << "address?:\n";
-
-    // std::string address_s;
-    // std::cin >> address_s;
-    // uintptr_t addr = std::stoull(address_s, nullptr, 16);
-
-    
-
-    // std::cout << std::hex << addr << std::dec;
-
-    // read_address(pid, addr);
-
-    // std::cout << "whatcha wanna write: \n";
-    // float value;
-    // std::cin >> value;
-
-    // write_address(pid, addr, value);
 
     return 0;
 }
