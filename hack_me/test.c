@@ -1,5 +1,5 @@
 #include <stdio.h>
 int main() {
-    printf("go fuck urself fag");
+    printf("love urself twink!");
     return 0;
 }
