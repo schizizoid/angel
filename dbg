@@ -1,6 +1,6 @@
 #!/bin/bash
-rm build/scanny
+rm build/angel
 echo "compiling"
-g++ src/scanny.cpp -Iinclude -Llib -lglfw3 -limgui -o build/scanny
+g++ src/main.cpp -Iinclude -Llib -lglfw3 -limgui -o build/angel
 echo "build successfull? attempting run"
-sudo build/scanny
+sudo build/angel
