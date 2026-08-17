@@ -1,6 +1,6 @@
 #!/bin/bash
 rm build/angel
 echo "compiling"
-g++ src/main.cpp -Iinclude -Llib -lglfw3 -limgui -o build/angel
+make -j$(nproc)
 echo "build successfull? attempting run"
 sudo build/angel
